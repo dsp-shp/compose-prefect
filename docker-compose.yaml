@@ -1,0 +1,81 @@
+version: "3.9"
+services:
+  database:
+    container_name: database
+    image: postgres:alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=prefect
+    expose:
+      - 5432
+    ports:
+      - 5432:5432
+    volumes:
+      - ./db:/var/lib/postgresql/data
+
+  server:
+    container_name: server
+    build:
+      context: .
+      dockerfile: ./server.Dockerfile
+    restart: always
+    volumes:
+      - ./prefect:/root/.prefect
+      - "./flows:/root/flows"
+    entrypoint: ["/opt/prefect/entrypoint.sh", "prefect", "server", "start"]
+    environment:
+      - PREFECT_UI_URL=http://127.0.0.1:4200/api
+      - PREFECT_API_URL=http://127.0.0.1:4200/api
+      # If you want to access Prefect Server UI from anywhere other than Docker
+      # host machine, you need to change PREFECT_UI_URL and PREFECT_API_URL to
+      # match the external hostname/IP of the host machine. For example:
+      # - PREFECT_UI_URL=http://external-ip:4200/api
+      # - PREFECT_API_URL=http://external-ip:4200/api
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://postgres:postgres@database:5432/prefect
+    ports:
+      - 4200:4200
+    depends_on:
+      - database
+
+  worker-0:
+    container_name: worker-0
+    image: prefecthq/prefect:3-python3.12
+    restart: always
+    entrypoint:
+      [
+        "/opt/prefect/entrypoint.sh",
+        "prefect",
+        "worker",
+        "start",
+        "-p",
+        "default",
+      ]
+    environment:
+      - PREFECT_API_URL=http://server:4200/api
+
+  worker-1:
+    container_name: worker-1
+    image: prefecthq/prefect:3-python3.12
+    restart: always
+    entrypoint:
+      [
+        "/opt/prefect/entrypoint.sh",
+        "prefect",
+        "worker",
+        "start",
+        "-p",
+        "default",
+      ]
+    environment:
+      - PREFECT_API_URL=http://server:4200/api
+
+volumes:
+  prefect:
+  db:
+  flows:
+networks:
+  default:
+    name: prefect-network
